@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <ctime>
 #include <fcntl.h>
 #include <iostream>
@@ -12,30 +13,34 @@ public:
   char playerChar;
   bool isJumping = false;
   int jumpStartY[4];
-
   int jumpPhase = 0;
   int stepCounter = 0;
-  const int UP_STEPS = 4;
-  const int HANG_FRAMES = 1;
-  const int DOWN_STEPS = 8;
+  int fallWait = 0;
+  const int UP_STEPS = 3;
+  const int HANG_FRAMES = 6;
+  const int DOWN_STEPS = 3;
+  const int FALL_DELAY = 2;
 
   void jump() {
     if (isJumping)
       return;
     isJumping = true;
+    jumpPhase = 0;
+    stepCounter = 0;
+    fallWait = 0;
     for (int i = 0; i < 4; i++) {
       jumpStartY[i] = y[i];
     }
   }
+
   void updateJump() {
     if (!isJumping)
       return;
 
     if (jumpPhase == 0) {
       if (stepCounter < UP_STEPS) {
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; i++)
           y[i]--;
-        }
         stepCounter++;
         return;
       }
@@ -45,47 +50,43 @@ public:
     }
 
     if (jumpPhase == 1) {
-
       if (stepCounter < HANG_FRAMES) {
         stepCounter++;
         return;
       }
       jumpPhase = 2;
       stepCounter = 0;
+      fallWait = 0;
       return;
     }
 
     if (jumpPhase == 2) {
-      if (stepCounter % 2 == 1) {
-        stepCounter++;
+      fallWait++;
+      if (fallWait < FALL_DELAY)
         return;
-      }
+      fallWait = 0;
+
       if (stepCounter < DOWN_STEPS) {
         for (int i = 0; i < 4; i++) {
           y[i]++;
+          if (y[i] >= jumpStartY[i])
+            y[i] = jumpStartY[i];
         }
         stepCounter++;
-
-        for (int i = 0; i < 4; i++) {
-          if (y[i] >= jumpStartY[i]) {
-            y[i] = jumpStartY[i];
-          }
-        }
         return;
       }
       isJumping = false;
       jumpPhase = 0;
       stepCounter = 0;
+      fallWait = 0;
     }
   }
 
-  Player(int x[], int y[], char playerChar) {
-    int size = 4;
-    for (int i = 0; i < size; i++) {
+  Player(int x[], int y[], char pc) : playerChar(pc) {
+    for (int i = 0; i < 4; i++) {
       this->x[i] = x[i];
       this->y[i] = y[i];
     }
-    this->playerChar = playerChar;
   }
 };
 
@@ -97,10 +98,8 @@ public:
   int *pY;
   char obstacleChar;
 
-  Obstacle(int width, int height, int startX, int startY, char obstacleChar) {
-    this->width = width;
-    this->height = height;
-    this->obstacleChar = obstacleChar;
+  Obstacle(int w, int h, int startX, int startY, char oc)
+      : width(w), height(h), obstacleChar(oc) {
     int size = width * height;
     pX = new int[size];
     pY = new int[size];
@@ -120,6 +119,7 @@ public:
     delete[] pY;
   }
 
+  // Bewegung nach links
   void move() {
     int size = width * height;
     for (int i = 0; i < size; i++) {
@@ -127,15 +127,17 @@ public:
     }
   }
 
+  // Prüfen ob noch im sichtbaren Bereich
   bool isVisible() const {
     int size = width * height;
     for (int i = 0; i < size; i++) {
       if (pX[i] > 0)
-        return true;
+        return true; // Noch mindestens ein Teil sichtbar
     }
     return false;
   }
 
+  // Rechte Kante für Abstandsberechnung
   int getRightEdge() const {
     int maxX = 0;
     int size = width * height;
@@ -148,23 +150,21 @@ public:
 };
 
 bool isRunning = true;
-int score = 0;
-const int WIDTH = 60;
-const int HEIGHT = 15;
-const int GROUND_Y = 12;
-
-std::vector<Obstacle *> obstacles;
-int frameCounter = 0;
-int lastObstacleX = WIDTH + 10;
+const int WIDTH = 80;
+const int HEIGHT = 10;
+const int GROUND_Y = 8;
+const int MIN_OBSTACLE_DISTANCE = 4; // Mindestabstand zwischen Hindernissen
 
 Player *pPlayer = nullptr;
+std::vector<Obstacle *> obstacles; // ← Alle Hindernisse
+int frameCounter = 0;              // ← Für Spawn-Timing
+int lastObstacleX = WIDTH + 10;    // ← Letzte Hindernis-Position
 
 void inputOn() {
   struct termios tty;
   tcgetattr(STDIN_FILENO, &tty);
   tty.c_lflag &= ~(ICANON | ECHO);
   tcsetattr(STDIN_FILENO, TCSANOW, &tty);
-
   fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 }
 
@@ -174,6 +174,7 @@ void inputOff() {
   tty.c_lflag |= (ICANON | ECHO);
   tcsetattr(STDIN_FILENO, TCSANOW, &tty);
 }
+
 void handleInput() {
   char c;
   if (read(STDIN_FILENO, &c, 1) == 1) {
@@ -183,20 +184,21 @@ void handleInput() {
       break;
     case ' ':
       pPlayer->jump();
-    };
-  }
-};
-bool isPlayer(int x, int y) {
-  if (pPlayer == nullptr)
-    return false;
-
-  for (int i = 0; i < 4; i++) {
-    if (x == pPlayer->x[i] && y == pPlayer->y[i]) {
-      return true;
+      break;
     }
+  }
+}
+
+bool isPlayer(int x, int y) {
+  if (!pPlayer)
+    return false;
+  for (int i = 0; i < 4; i++) {
+    if (x == pPlayer->x[i] && y == pPlayer->y[i])
+      return true;
   }
   return false;
 }
+
 bool isObstacle(int x, int y) {
   for (auto *obs : obstacles) {
     int size = obs->width * obs->height;
@@ -207,8 +209,6 @@ bool isObstacle(int x, int y) {
   }
   return false;
 }
-
-bool isBottom(int x, int y) { return y >= GROUND_Y; }
 
 bool checkCollision() {
   if (!pPlayer)
@@ -221,67 +221,79 @@ bool checkCollision() {
   return false;
 }
 
-void spawnObstacle() {
-  int width = 1 + rand() % 3;
-  int height = 1 + rand() % 2;
+bool isBottom(int x, int y) { return y >= GROUND_Y; }
 
+void spawnObstacle() {
+  // Zufällige Größe: 1-3 breit, 1-2 hoch
+  int w = 1 + rand() % 3;
+  int h = 1 + rand() % 2;
+
+  // Startposition: Rechts außerhalb des Bildschirms
   int startX = WIDTH + 1;
-  int startY = GROUND_Y - height;
+
+  // Y-Position: Auf dem Boden (GROUND_Y - Höhe)
+  int startY = GROUND_Y - h;
 
   char chars[] = {'#', '@', '%', '&', 'X'};
-  char obstacleChar = chars[rand() % 5];
+  char oc = chars[rand() % 5];
 
-  obstacles.push_back(
-      new Obstacle(width, height, startX, startY, obstacleChar));
-  lastObstacleX = startX + width;
+  obstacles.push_back(new Obstacle(w, h, startX, startY, oc));
+  lastObstacleX = startX + w;
 }
 
 void updateObstacles() {
+  // Alle Hindernisse bewegen
   for (auto *obs : obstacles) {
     obs->move();
   }
 
+  // Invisible Hindernisse löschen
   for (auto it = obstacles.begin(); it != obstacles.end();) {
     if (!(*it)->isVisible()) {
       delete *it;
       it = obstacles.erase(it);
-      score++;
     } else {
       ++it;
     }
   }
 
-  int rightMostX = 0;
+  // Neues Hindernis spawnen?
+  // Prüfe Abstand zum rechtesten Hindernis
+  int rightmostX = 0;
   for (auto *obs : obstacles) {
     int right = obs->getRightEdge();
-    if (right > rightMostX)
-      rightMostX = right;
+    if (right > rightmostX)
+      rightmostX = right;
   }
 
-  if (rightMostX < WIDTH - 15 || obstacles.empty()) {
-    if (rand() % 18 == 0) {
+  // Wenn genug Abstand (oder keine Hindernisse), erstelle neues
+  if (rightmostX < WIDTH - MIN_OBSTACLE_DISTANCE || obstacles.empty()) {
+    // Zusätzlich: Zufällige Verzögerung damit nicht zu viele kommen
+    if (rand() % 30 == 0) { // 1/30 Chance pro Frame
       spawnObstacle();
     }
   }
 }
+
 void drawCanvas() {
   system("clear");
 
-  std::cout << "PRESS'SPACE' TO JUMP\n";
-  std::cout << "SCORE: " << score << "\n";
   for (int y = 1; y <= HEIGHT; y++) {
     for (int x = 1; x <= WIDTH; x++) {
       if (isPlayer(x, y)) {
         std::cout << pPlayer->playerChar;
       } else if (isObstacle(x, y)) {
+        // Finde welches Hindernis und zeige dessen Char
         for (auto *obs : obstacles) {
           int size = obs->width * obs->height;
           for (int i = 0; i < size; i++) {
             if (x == obs->pX[i] && y == obs->pY[i]) {
               std::cout << obs->obstacleChar;
+              goto nextChar; // Einfacher Break aus verschachtelten Loops
             }
           }
         }
+      nextChar:;
       } else if (isBottom(x, y)) {
         std::cout << "*";
       } else {
@@ -293,36 +305,38 @@ void drawCanvas() {
 }
 
 int main() {
-  srand(time(NULL));
+  srand(time(nullptr)); // Zufall initialisieren
+
   int xCoords[4] = {5, 5, 6, 6};
-  int yCoords[4] = {GROUND_Y - 1, GROUND_Y - 2, GROUND_Y - 1, GROUND_Y - 2};
-
+  int yCoords[4] = {6, 7, 6, 7};
   Player player(xCoords, yCoords, '0');
-
   pPlayer = &player;
 
   inputOn();
+
   do {
     handleInput();
     pPlayer->updateJump();
-    updateObstacles();
+    updateObstacles(); // ← Hindernisse bewegen & spawnen
+
+    // Kollisionsprüfung
     if (checkCollision()) {
+      // Game Over - einfache Version
+      system("clear");
+      std::cout << "GAME OVER!\n";
+      sleep(2);
       isRunning = false;
     }
 
     drawCanvas();
-    usleep(50000 - (score * 500));
+    usleep(50000); // 20 FPS
   } while (isRunning);
 
+  // Aufräumen
   for (auto *obs : obstacles)
     delete obs;
   obstacles.clear();
-  inputOff();
 
-  system("clear");
-  std::cout << "************* GAME OVER! *************\n";
-  std::cout << "\nThanks for playing!\n";
-  std::cout << "Final score: " << score;
-  usleep(900000);
+  inputOff();
   return 0;
 }
