@@ -10,6 +10,9 @@ SYS_IOCTL   equ 16
 TCGETS      equ 0x5401
 TCSETS      equ 0x5402
 
+NUM_OBSTACLES   equ 4           
+MIN_DISTANCE    equ 15
+
 section .data
     clear_seq       db 27, "[2J", 27, "[H", 0
     hide_cursor     db 27, "[?25l", 0
@@ -25,8 +28,10 @@ section .data
     newline         db 10, 0
     player_char     db "0", 0
     
-    player_x        dd 5, 6, 5, 6
-    player_y        dd 4, 4, 5, 5
+    player_x        dd 4,4, 5, 5
+    player_y        dd 4, 5, 4, 5
+
+    obstacleChars db "#", "+", "@", "%", "$"
 
 
 section .bss
@@ -42,6 +47,13 @@ section .bss
     jumpPhase resd 1
     stepCounter resd 1
 
+    obstacle_x resb 32
+    obstacle_y resb 32
+    obstacle_end resb 32   ; letztes segment eines obstacles
+    obstacleCount resb 1   ; anazhl aktiveer obstacles-segmente
+    obstacleNum   resb 1   ; Anzahl aktiver obstacles gesamt
+    obstacleChar resb 2
+    
 section .text
     global _start
 
@@ -63,25 +75,238 @@ _start:
     call _set_raw_mode
     mov rax, hide_cursor
     call _print
+    call _initObstacles
     mov byte [isRunning], 1
 
 .mainLoop:
     cmp byte [isRunning], 0
-    je .game_over
+    je .gameOver
     
     call _handleInput
+    call _updateObstacle
     call _updateJump
     call _drawCanvas
     sleep gamedelay
     jmp .mainLoop
 
-.game_over:
+.gameOver:
     call _clearScreen
     mov rax, show_cursor
     call _print
     call _restore_terminal
     jmp _exit
 
+_initObstacles:
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+
+    mov byte [obstacleCount], 0
+    mov byte [obstacleNum], 0
+
+.initLoop:
+    movzx eax, byte [obstacleNum]
+    cmp eax, NUM_OBSTACLES
+    jge .done
+
+    call _generateObstacle
+    jmp .initLoop
+
+.done:
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    ret
+
+_generateObstacle:
+    push rax
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push r8
+    push r10
+
+    movzx rdi, byte [obstacleCount]   
+
+    ; zufällige breite 1-3
+    call _getRandom
+    xor edx, edx
+    mov ecx, 3
+    div ecx             ; edx = eax % 3 => 0,1,2
+    mov ebx, edx
+    inc ebx             ; width
+
+    call _getRandom
+    and eax, 1          
+    inc eax
+    mov edx, eax        ; height 1 o. 2
+
+    movzx eax, byte [obstacleNum]
+    cmp eax, 0
+    je .firstObstacle
+
+    ; letztes x im array finden
+    xor ecx, ecx
+    xor rsi, rsi
+    movzx r8, byte [obstacleCount]
+
+
+.findMaxX:
+    cmp rsi, r8
+    jge .foundMax
+
+    movzx eax, byte [obstacle_x + rsi]
+    cmp eax, ecx
+    jle .nextSearch
+    mov ecx, eax
+
+.nextSearch:
+    inc rsi
+    jmp .findMaxX
+
+.foundMax:
+    add ecx, MIN_DISTANCE
+    call _getRandom
+    and eax, 20
+    add ecx, eax
+    cmp ecx, 60
+    jge .write
+
+; start bei 60
+.firstObstacle:
+    mov ecx, 60
+
+.write:
+    .write_loop:
+     cmp ebx, 0
+     je .done_write
+
+     ; unterste zeile immer y=4
+     mov byte [obstacle_x + rdi], cl
+     mov byte [obstacle_y + rdi], 4
+     mov byte [obstacle_end + rdi], 0
+     inc rdi
+
+     ; zweite zeile y=5 wenn edx=2
+     cmp edx, 2
+     jne .next_col
+     mov byte [obstacle_x + rdi], cl
+     mov byte [obstacle_y + rdi], 5
+     mov byte [obstacle_end + rdi], 0
+     inc rdi
+
+    .next_col:
+     inc ecx
+     dec ebx
+     jmp .write_loop
+
+.done_write:
+    ; letztes geschriebenes segment markieren für obstacle_end
+    mov r10, rdi
+    dec r10
+    mov byte [obstacle_end + r10], 1
+
+    mov [obstacleCount], dil
+
+    ; obstacleNum++
+    movzx eax, byte [obstacleNum]
+    inc eax
+    mov [obstacleNum], al
+
+    pop r10
+    pop r8
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    pop rax
+    ret
+
+_updateObstacle:
+    push rax
+    push rbx
+    push rcx
+    push rsi
+    push rdi
+    push r8
+    push r9
+
+    movzx rcx, byte [obstacleCount]
+    xor rbx, rbx        
+    xor rdi, rdi        
+    xor r8, r8         
+
+.checkLoop:
+    cmp rbx, rcx
+    jge .finish
+
+    movsx eax, byte [obstacle_x + rbx]
+
+    ; wenn x>0 dann segment deleten
+    cmp eax, 0          
+    jl .deleteSegment
+
+    dec eax
+    mov [obstacle_x + rdi], al
+    mov al, [obstacle_y + rbx]
+    mov [obstacle_y + rdi], al
+
+    mov al, [obstacle_end + rbx]
+    mov [obstacle_end + rdi], al
+    inc rdi
+    inc rbx
+    jmp .checkLoop
+
+.deleteSegment:
+    movzx eax, byte [obstacle_end + rbx]
+    inc rbx
+    cmp eax, 1
+    je .last ; wenn es das letzte segment eines obstacles war => neues generieren
+    jmp .checkLoop    
+
+.last:
+    inc r8   
+    jmp .checkLoop
+
+.finish:
+    mov [obstacleCount], dil
+
+    ; obstacleNum updaten
+    movzx eax, byte [obstacleNum]
+    sub eax, r8d
+    mov [obstacleNum], al
+
+.generateNew:
+    cmp r8, 0
+    jle .done
+    call _generateObstacle
+    dec r8
+    jmp .generateNew
+
+.done:
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rcx
+    pop rbx
+    pop rax
+    ret
+
+; eax = random num (0-255)
+_getRandom:
+    push rdx
+    rdtsc                   
+    xor eax, edx        
+    pop rdx
+    ret
 
 _handleInput:
     push rax
@@ -333,29 +558,87 @@ _isPlayerHere:
     
     xor r14, r14            
     
-.check_loop:
+.checkLoop:
     cmp r14, 4
-    jge .not_player       
+    jge .notPlayer       
     
     mov eax, dword [player_x + r14*4]   
     cmp r12d, eax
-    jne .next_char
+    jne .nextChar
     
     mov eax, dword [player_y + r14*4] 
     cmp r13d, eax
-    jne .next_char
+    jne .nextChar
     
     mov rax, 1
-    jmp .done
+    pop r14
+    pop r13
+    pop r12
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    ret
 
-.next_char:
+.nextChar:
+    inc r14
+    jmp .checkLoop
+
+.notPlayer:
+    xor rax, rax
+    pop r14
+    pop r13
+    pop r12
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    ret
+
+_isObstacleHere:
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    push r12
+    push r13
+    push r14
+
+    ; rbx = screen-x, rcx = screen-y
+    call _screenToGame      
+    ; r12 = game-x, r13 = game-y
+
+    xor r14, r14  ; index
+
+.check_loop:
+    movzx rcx, byte [obstacleCount]
+    cmp r14, rcx
+    jge .notObstacle
+
+    movsx eax, byte [obstacle_x + r14]
+    cmp r12d, eax
+    jne .next
+
+    movsx eax, byte [obstacle_y + r14]
+    cmp r13d, eax
+    jne .next
+
+    mov rax, 1
+    pop r14
+    pop r13
+    pop r12
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    ret
+
+.next:
     inc r14
     jmp .check_loop
 
-.not_player:
+.notObstacle:
     xor rax, rax
-
-.done:
     pop r14
     pop r13
     pop r12
@@ -376,15 +659,19 @@ _isGroundHere:
     call _screenToGame      
     
     cmp r13d, dword [ground_y]
-    jle .is_ground
+    jle .isGround
     
     xor rax, rax
-    jmp .done
+    pop r13
+    pop r12
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    ret
 
-.is_ground:
+.isGround:
     mov rax, 1
-
-.done:
     pop r13
     pop r12
     pop rsi
@@ -414,10 +701,17 @@ _drawCanvas:
     
     push rbx
     push rcx
+
+    mov rbx, rbx
+    mov rcx, rcx
     
     call _isPlayerHere
     cmp rax, 1
     je .draw_player
+
+    call _isObstacleHere
+    cmp rax, 1
+    je .drawObstacle
     
     call _isGroundHere
     cmp rax, 1
@@ -428,6 +722,11 @@ _drawCanvas:
     jmp .next_width
 
 .draw_player:
+    mov rax, player_char
+    call _print
+    jmp .next_width
+
+.drawObstacle:
     mov rax, player_char
     call _print
     jmp .next_width

@@ -264,6 +264,7 @@ void updateObstacles() {
     }
   }
 }
+
 void drawCanvas() {
   system("clear");
 
