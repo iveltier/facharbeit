@@ -150,6 +150,8 @@ _start:
     mov rax, endMsg
     call _print
 
+    mov rax, newline
+    call _print
 
 
     jmp _exit
