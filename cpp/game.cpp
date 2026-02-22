@@ -321,7 +321,7 @@ int main() {
     usleep(200000);
     std::cout << "\nYou just broke the developer-highscore!";
   }
-  std::cout << "\nDeveloper-Highscore: 59";
+  std::cout << "\n\nDeveloper-Highscore: 59\n";
   std::cout << "\x1B[?25h";
   usleep(900000);
   return 0;
