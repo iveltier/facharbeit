@@ -754,7 +754,7 @@ _isObstacleHere:
     call _screenToGame      
     ; r12 = game-x, r13 = game-y
 
-    xor r14, r14  ; index
+    xor r14, r14
 
 .check_loop:
     movzx rcx, byte [obstacleCount]
@@ -963,7 +963,7 @@ _printScore:
 
     mov eax, dword [score]
     lea rdi, [scoreBuf + 11]
-    mov byte [rdi], 0       ; Null-Terminator am Ende
+    mov byte [rdi], 0 
     dec rdi
 
     cmp eax, 0
@@ -977,14 +977,14 @@ _printScore:
     je .print
     xor edx, edx
     mov ecx, 10
-    div ecx                 ; eax = eax / 10, edx = Rest
+    div ecx
     add dl, '0'
     mov [rdi], dl
     dec rdi
     jmp .convert
 
 .print:
-    inc rdi                 ; rdi zeigt auf erstes Zeichen
+    inc rdi
     mov rax, rdi
     call _print
 
