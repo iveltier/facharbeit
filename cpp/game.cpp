@@ -319,7 +319,7 @@ int main() {
   std::cout << "Final score: " << score;
   if (score > 59) {
     usleep(200000);
-    std::cout << "You just broke the developer-highscore!";
+    std::cout << "\nYou just broke the developer-highscore!";
   }
   std::cout << "\nDeveloper-Highscore: 59";
   std::cout << "\x1B[?25h";
