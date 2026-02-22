@@ -78,14 +78,14 @@ class Obstacle {
         this.height = height;
         this.obstacleChar = obstacleChar
         const size = width * height
-        this.pX = new Array(size)
-        this.pY = new Array(size)
+        this.x = new Array(size)
+        this.y = new Array(size)
 
         let index = 0;
         for (let i = 0; i < height; i++) {
             for (let j = 0; j < width; j++) {
-                this.pX[index] = startX + j;
-                this.pY[index] = startY + i
+                this.x[index] = startX + j;
+                this.y[index] = startY + i
                 index++;
             }
         }
@@ -93,13 +93,13 @@ class Obstacle {
     move() {
         const size = this.width * this.height;
         for (let i = 0; i < size; i++) {
-            this.pX[i]--;
+            this.x[i]--;
         }
     }
     isVisible() {
         const size = this.width * this.height;
         for (let i = 0; i < size; i++) {
-            if (this.pX[i] > 0) { return true }
+            if (this.x[i] > 0) { return true }
 
         }
         return false
@@ -109,7 +109,7 @@ class Obstacle {
         let maxX = 0;
         const size = this.width * this.height;
         for (let i = 0; i < size; i++) {
-            if (this.pX[i] > maxX) { maxX = this.pX[i] }
+            if (this.x[i] > maxX) { maxX = this.x[i] }
         }
         return maxX
     }
@@ -166,7 +166,7 @@ function isObstacle(x, y) {
     for (let obstacle of obstacles) {
         const size = obstacle.width * obstacle.height;
         for (let indx = 0; indx < size; indx++) {
-            if (x === obstacle.pX[indx] && y === obstacle.pY[indx]) return true
+            if (x === obstacle.x[indx] && y === obstacle.y[indx]) return true
         }
     }
     return false;
@@ -180,7 +180,7 @@ function getObstacleChar(x, y) {
     for (let obstacle of obstacles) {
         const size = obstacle.width * obstacle.height;
         for (let indx = 0; indx < size; indx++) {
-            if (x === obstacle.pX[indx] && y === obstacle.pY[indx]) { return obstacle.obstacleChar };
+            if (x === obstacle.x[indx] && y === obstacle.y[indx]) { return obstacle.obstacleChar };
         }
     }
     return " ";
