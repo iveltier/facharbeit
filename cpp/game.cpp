@@ -15,9 +15,6 @@ public:
 
   int jumpPhase = 0;
   int stepCounter = 0;
-  const int UP_STEPS = 4;
-  const int HANG_FRAMES = 1;
-  const int DOWN_STEPS = 8;
 
   void jump() {
     if (isJumping)
@@ -32,7 +29,7 @@ public:
       return;
 
     if (jumpPhase == 0) {
-      if (stepCounter < UP_STEPS) {
+      if (stepCounter < 4) {
         for (int i = 0; i < 4; i++) {
           y[i]--;
         }
@@ -46,7 +43,7 @@ public:
 
     if (jumpPhase == 1) {
 
-      if (stepCounter < HANG_FRAMES) {
+      if (stepCounter < 1) {
         stepCounter++;
         return;
       }
@@ -56,11 +53,7 @@ public:
     }
 
     if (jumpPhase == 2) {
-      if (stepCounter % 2 == 1) {
-        stepCounter++;
-        return;
-      }
-      if (stepCounter < DOWN_STEPS) {
+      if (stepCounter < 4) {
         for (int i = 0; i < 4; i++) {
           y[i]++;
         }
@@ -267,7 +260,7 @@ void updateObstacles() {
 
 void drawCanvas() {
   system("clear");
-
+  std::cout << "\x1B[?25l";
   std::cout << "PRESS'SPACE' TO JUMP\n";
   std::cout << "SCORE: " << score << "\n";
   for (int y = 1; y <= HEIGHT; y++) {
@@ -322,8 +315,14 @@ int main() {
 
   system("clear");
   std::cout << "************* GAME OVER! *************\n";
-  std::cout << "\nThanks for playing!\n";
+  std::cout << "\nThanks for playing!\n\n";
   std::cout << "Final score: " << score;
+  if (score > 59) {
+    usleep(200000);
+    std::cout << "You just broke the developer-highscore!";
+  }
+  std::cout << "\nDeveloper-Highscore: 59";
+  std::cout << "\x1B[?25h";
   usleep(900000);
   return 0;
 }

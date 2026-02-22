@@ -11,7 +11,7 @@ TCGETS      equ 0x5401
 TCSETS      equ 0x5402
 
 NUM_OBSTACLES   equ 4           
-MIN_DISTANCE    equ 15
+MIN_DISTANCE    equ 20
 
 section .data
     clear_seq       db 27, "[2J", 27, "[H", 0
@@ -38,6 +38,8 @@ section .data
     scoreMsg db "SCORE: ",0
     gameOverMsg db "****** GAME OVER *****", 0
     endMsg db "*** Thanks for Playing! ***",0 
+    highscoreMsg db "Developer-Highscore: 60",0
+    brokeHighscoreMsg db "You just broke the developer-highscore!",0
 
 
 section .bss
@@ -142,6 +144,20 @@ _start:
 
     mov rax, newline
     call _print
+
+    mov rax, highscoreMsg
+    call _print
+
+    mov rax, newline
+    call _print
+
+    mov rbx, [score]
+    cmp rbx, 60
+    jg .brokeHighscore
+    
+    .end:
+    mov rax, newline
+    call _print
     mov rax, newline
     call _print
 
@@ -153,9 +169,12 @@ _start:
     mov rax, newline
     call _print
 
-
     jmp _exit
 
+    .brokeHighscore:
+        mov rax, brokeHighscoreMsg
+        call _print
+        jmp .end
 _checkCollision:
     push rbx
     push rcx
