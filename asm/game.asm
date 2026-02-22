@@ -14,9 +14,9 @@ NUM_OBSTACLES   equ 4
 MIN_DISTANCE    equ 20
 
 section .data
-    clear_seq       db 27, "[2J", 27, "[H", 0
-    hide_cursor     db 27, "[?25l", 0
-    show_cursor     db 27, "[?25h", 0
+    clear       db 27, "[2J", 27, "[H", 0
+    hideCursor     db 27, "[?25l", 0
+    showCursor     db 27, "[?25h", 0
     
     gamedelay       dq 0,  50000000
     enddelay dq 0, 900000000
@@ -86,22 +86,24 @@ section .text
 _start:
 
     mov dword [score], 0        
-    call _save_terminal
-    call _set_raw_mode
-    mov rax, hide_cursor
-    call _print
-    call _initObstacles
+    call saveTerminal
+    call setRawMode
+
+    mov rax, hideCursor
+    call print
+
+    call initObstacles
     mov byte [isRunning], 1
 
 .mainLoop:
     cmp byte [isRunning], 0
     je .gameOver
     
-    call _handleInput
-    call _updateObstacle
-    call _updateJump
-    call _checkCollision
-    call _drawCanvas
+    call handleInput
+    call updateJump
+    call updateObstacle
+    call checkCollision
+    call drawCanvas
 
    ; je größer score umso schneller
    push rax
@@ -125,31 +127,31 @@ _start:
     jmp .mainLoop
 
 .gameOver:
-    call _clearScreen
-    mov rax, show_cursor
-    call _print
-    call _restore_terminal
+    call clearScreen
+    mov rax, showCursor
+    call print
+    call restoreTerminal
 
     mov rax, gameOverMsg
-    call _print
+    call print
 
     mov rax, newline
-    call _print
+    call print
     mov rax, newline
-    call _print
+    call print
     
     mov rax, scoreMsg
-    call _print
-    call _printScore
+    call print
+    call printScore
 
     mov rax, newline
-    call _print
+    call print
 
     mov rax, highscoreMsg
-    call _print
+    call print
 
     mov rax, newline
-    call _print
+    call print
 
     mov rbx, [score]
     cmp rbx, 60
@@ -157,77 +159,76 @@ _start:
     
     .end:
     mov rax, newline
-    call _print
+    call print
     mov rax, newline
-    call _print
+    call print
 
     sleep enddelay
 
     mov rax, endMsg
-    call _print
+    call print
 
     mov rax, newline
-    call _print
+    call print
 
-    jmp _exit
+    jmp exit
 
     .brokeHighscore:
         mov rax, brokeHighscoreMsg
-        call _print
+        call print
         jmp .end
-_checkCollision:
-    push rbx
-    push rcx
-    push rdx
+
+saveTerminal:
+    push rax
+    push rdi
     push rsi
-    push r12
-    push r13
-    push r14
-
-    movsx r12d, byte [player_x]     
-    movsx r13d, byte [player_y]    
-
-    xor r14, r14                    
-
-.checkLoop:
-    movzx ecx, byte [obstacleCount]
-    cmp r14d, ecx
-    jge .noCollision                
-
-    movsx eax, byte [obstacle_x + r14]
-    cmp r12d, eax                  
-    jne .next
-
-    movsx eax, byte [obstacle_y + r14]
-    cmp r13d, eax                  
-    jne .next
-
-    mov byte [isRunning], 0
-
-    pop r14
-    pop r13
-    pop r12
-    pop rsi
+    push rdx
+    mov rax, SYS_IOCTL
+    mov rdi, STDIN
+    mov rsi, TCGETS
+    mov rdx, old_termios
+    syscall
     pop rdx
-    pop rcx
-    pop rbx
+    pop rsi
+    pop rdi
+    pop rax
     ret
 
-.next:
-    inc r14
-    jmp .checkLoop
-
-.noCollision:
-    pop r14
-    pop r13
-    pop r12
-    pop rsi
+setRawMode:
+    push rax
+    push rdi
+    push rsi
+    push rdx
+    
+    mov rax, SYS_IOCTL
+    mov rdi, STDIN
+    mov rsi, TCGETS
+    mov rdx, termios
+    syscall
+    
+    mov eax, dword [termios + 12]
+    and eax, ~2
+    and eax, ~8
+    and eax, ~1
+    mov dword [termios + 12], eax
+    
+    mov byte [termios + 22], 0
+    mov byte [termios + 23], 0
+    
+    mov rax, SYS_IOCTL
+    mov rdi, STDIN
+    mov rsi, TCSETS
+    mov rdx, termios
+    syscall
+    
     pop rdx
-    pop rcx
-    pop rbx
+    pop rsi
+    pop rdi
+    pop rax
     ret
 
-_initObstacles:
+
+initObstacles:
     push rbx
     push rcx
     push rdx
@@ -242,7 +243,7 @@ _initObstacles:
     cmp eax, NUM_OBSTACLES
     jge .done
 
-    call _generateObstacle
+    call generateObstacle
     jmp .initLoop
 
 .done:
@@ -253,7 +254,233 @@ _initObstacles:
     pop rbx
     ret
 
-_generateObstacle:
+handleInput:
+    push rax
+    push rdi
+    push rsi
+    push rdx
+    
+    mov rax, SYS_READ
+    mov rdi, STDIN
+    mov rsi, key_buffer
+    mov rdx, 1
+    syscall
+    
+    cmp rax, 1
+    jl .noInput
+    
+    movzx rax, byte [key_buffer]
+    cmp al, 'q'
+    je .quitKey
+    cmp al, 'Q'
+    je .quitKey
+    
+    cmp al, ' '
+    je .jumpKey
+    
+    jmp .noInput
+
+.quitKey:
+    mov byte [isRunning], 0
+    jmp .noInput
+
+.jumpKey:
+    call jump
+    jmp .noInput
+
+.noInput:
+    pop rdx
+    pop rsi
+    pop rdi
+    pop rax
+    ret
+
+jump:
+    push rax
+    
+    cmp byte [isJumping], 1
+    je .done
+    
+    mov byte [isJumping], 1
+
+    mov dword [jumpPhase], 0      
+    mov dword [stepCounter], 0   
+
+    mov eax, dword [player_y + 0]
+    mov dword [jumpStartY + 0], eax
+    mov eax, dword [player_y + 4]
+    mov dword [jumpStartY + 4], eax
+    mov eax, dword [player_y + 8]
+    mov dword [jumpStartY + 8], eax
+    mov eax, dword [player_y + 12]
+    mov dword [jumpStartY + 12], eax
+    
+.done:
+    pop rax
+    ret
+
+updateJump:
+    push rax
+
+    cmp byte [isJumping], 0
+    je .done
+
+    mov eax, dword [jumpPhase]
+    cmp eax, 0
+    je .phaseUp
+    cmp eax, 1
+    je .phaseHold
+    jmp .phaseDown
+
+.phaseUp:
+    mov eax, dword [player_y + 0]
+    add eax, 1
+    mov dword [player_y + 0], eax
+
+    mov eax, dword [player_y + 4]
+    add eax, 1
+    mov dword [player_y + 4], eax
+
+    mov eax, dword [player_y + 8]
+    add eax, 1
+    mov dword [player_y + 8], eax
+
+    mov eax, dword [player_y + 12]
+    add eax, 1
+    mov dword [player_y + 12], eax
+
+    mov eax, dword [stepCounter]
+    inc eax
+    mov dword [stepCounter], eax
+
+    cmp eax, 4
+    jl .done
+
+    mov dword [jumpPhase], 1
+    mov dword [stepCounter], 0
+    jmp .done
+
+.phaseHold:
+    mov eax, dword [stepCounter]
+    inc eax
+    mov dword [stepCounter], eax
+
+    cmp eax, 2
+    jl .done
+
+    mov dword [jumpPhase], 2
+    mov dword [stepCounter], 0
+    jmp .done
+
+.phaseDown:
+    mov eax, dword [player_y + 0]
+    cmp eax, dword [jumpStartY + 0]
+    je .landed
+
+    mov eax, dword [player_y + 0]
+    dec eax
+    mov dword [player_y + 0], eax
+
+    mov eax, dword [player_y + 4]
+    dec eax
+    mov dword [player_y + 4], eax
+
+    mov eax, dword [player_y + 8]
+    dec eax
+    mov dword [player_y + 8], eax
+
+    mov eax, dword [player_y + 12]
+    dec eax
+    mov dword [player_y + 12], eax
+
+    jmp .done
+
+.landed:
+    mov byte [isJumping], 0
+    mov dword [jumpPhase], 0
+    mov dword [stepCounter], 0
+
+.done:
+    pop rax
+    ret
+
+updateObstacle:
+    push rax
+    push rbx
+    push rcx
+    push rsi
+    push rdi
+    push r8
+    push r9
+
+    movzx rcx, byte [obstacleCount]
+    xor rbx, rbx        
+    xor rdi, rdi        
+    xor r8, r8         
+
+.checkLoop:
+    cmp rbx, rcx
+    jge .finish
+
+    movsx eax, byte [obstacle_x + rbx]
+
+    cmp eax, 0
+    jl .deleteSegment
+
+    dec eax
+    mov [obstacle_x   + rdi], al
+    mov al, [obstacle_y   + rbx]
+    mov [obstacle_y   + rdi], al
+    mov al, [obstacle_end + rbx]
+    mov [obstacle_end + rdi], al
+    mov al, [obstacleId  + rbx]   
+    mov [obstacleId  + rdi], al  
+    inc rdi
+    inc rbx
+    jmp .checkLoop
+
+.deleteSegment:
+    movzx eax, byte [obstacle_end + rbx]
+    inc rbx
+    cmp eax, 1
+    je .last ; wenn es das letzte segment eines obstacles war => neues generieren
+    jmp .checkLoop    
+
+.last:
+
+    inc r8   
+    jmp .checkLoop
+
+.finish:
+    mov [obstacleCount], dil
+
+    ; obstacleNum updaten
+    movzx eax, byte [obstacleNum]
+    sub eax, r8d
+    mov [obstacleNum], al
+
+.generateNew:
+    cmp r8, 0
+    jle .done
+    call generateObstacle
+    dec r8
+
+    mov eax, dword [score]
+    inc eax
+    mov dword [score], eax
+    jmp .generateNew
+
+.done:
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rcx
+    pop rbx
+    pop rax
+    ret
+
+generateObstacle:
     push rax
     push rbx
     push rcx
@@ -266,14 +493,14 @@ _generateObstacle:
     movzx rdi, byte [obstacleCount]
 
     ; zufälligen char bestimmen
-    call _getRandom
+    call getRandom
     xor edx, edx
     mov ecx, 5
     div ecx             
     mov r9b, dl         
 
     ; Breite 1-3
-    call _getRandom
+    call getRandom
     xor edx, edx
     mov ecx, 3
     div ecx             ; edx = 0,1,2
@@ -281,7 +508,7 @@ _generateObstacle:
     inc ebx             ; width = 1..3
 
     ; Höhe 1-2
-    call _getRandom
+    call getRandom
     and eax, 1
     inc eax
     mov edx, eax        ; height = 1 oder 2
@@ -310,7 +537,7 @@ _generateObstacle:
 .foundMax:
     add ecx, MIN_DISTANCE
 
-    call _getRandom
+    call getRandom
     and eax, 15
     add ecx, eax
 
@@ -367,317 +594,166 @@ _generateObstacle:
     pop rax
     ret
 
-_updateObstacle:
-    push rax
-    push rbx
-    push rcx
-    push rsi
-    push rdi
-    push r8
-    push r9
-
-    movzx rcx, byte [obstacleCount]
-    xor rbx, rbx        
-    xor rdi, rdi        
-    xor r8, r8         
-
-.checkLoop:
-    cmp rbx, rcx
-    jge .finish
-
-    movsx eax, byte [obstacle_x + rbx]
-
-    cmp eax, 0
-    jl .deleteSegment
-
-    dec eax
-    mov [obstacle_x   + rdi], al
-    mov al, [obstacle_y   + rbx]
-    mov [obstacle_y   + rdi], al
-    mov al, [obstacle_end + rbx]
-    mov [obstacle_end + rdi], al
-    mov al, [obstacleId  + rbx]   
-    mov [obstacleId  + rdi], al  
-    inc rdi
-    inc rbx
-    jmp .checkLoop
-
-
-.deleteSegment:
-    movzx eax, byte [obstacle_end + rbx]
-    inc rbx
-    cmp eax, 1
-    je .last ; wenn es das letzte segment eines obstacles war => neues generieren
-    jmp .checkLoop    
-
-.last:
-
-    inc r8   
-    jmp .checkLoop
-
-.finish:
-    mov [obstacleCount], dil
-
-    ; obstacleNum updaten
-    movzx eax, byte [obstacleNum]
-    sub eax, r8d
-    mov [obstacleNum], al
-
-.generateNew:
-    cmp r8, 0
-    jle .done
-    call _generateObstacle
-    dec r8
-
-    mov eax, dword [score]
-    inc eax
-    mov dword [score], eax
-    jmp .generateNew
-
-.done:
-
-    pop r9
-    pop r8
-    pop rdi
-    pop rsi
-    pop rcx
-    pop rbx
-    pop rax
-    ret
-
-
 ; eax = random num (0-255)
-_getRandom:
+getRandom:
     push rdx
     rdtsc                   
     xor eax, edx        
     pop rdx
     ret
 
-_handleInput:
-    push rax
-    push rdi
-    push rsi
+checkCollision:
+    push rbx
+    push rcx
     push rdx
-    
-    mov rax, SYS_READ
-    mov rdi, STDIN
-    mov rsi, key_buffer
-    mov rdx, 1
-    syscall
-    
-    cmp rax, 1
-    jl .no_input
-    
-    movzx rax, byte [key_buffer]
-    cmp al, 'q'
-    je .quit_key
-    cmp al, 'Q'
-    je .quit_key
-    
-    cmp al, ' '
-    je .jump_key
-    
-    jmp .no_input
+    push rsi
+    push r12
+    push r13
+    push r14
 
-.quit_key:
+    movsx r12d, byte [player_x]     
+    movsx r13d, byte [player_y]    
+
+    xor r14, r14                    
+
+.checkLoop:
+    movzx ecx, byte [obstacleCount]
+    cmp r14d, ecx
+    jge .noCollision                
+
+    movsx eax, byte [obstacle_x + r14]
+    cmp r12d, eax                  
+    jne .next
+
+    movsx eax, byte [obstacle_y + r14]
+    cmp r13d, eax                  
+    jne .next
+
     mov byte [isRunning], 0
-    jmp .no_input
 
-.jump_key:
-    call _jump
-    jmp .no_input
-
-.no_input:
-    pop rdx
+    pop r14
+    pop r13
+    pop r12
     pop rsi
-    pop rdi
-    pop rax
-    ret
-
-_jump:
-    push rax
-    
-    cmp byte [isJumping], 1
-    je .jump_done
-    
-    mov byte [isJumping], 1
-
-    mov dword [jumpPhase], 0      
-    mov dword [stepCounter], 0   
-
-    mov eax, dword [player_y + 0]
-    mov dword [jumpStartY + 0], eax
-    mov eax, dword [player_y + 4]
-    mov dword [jumpStartY + 4], eax
-    mov eax, dword [player_y + 8]
-    mov dword [jumpStartY + 8], eax
-    mov eax, dword [player_y + 12]
-    mov dword [jumpStartY + 12], eax
-    
-
-.jump_done:
-    pop rax
-    ret
-
-_updateJump:
-    push rax
-
-    cmp byte [isJumping], 0
-    je .update_done
-
-    mov eax, dword [jumpPhase]
-    cmp eax, 0
-    je .phase_up
-    cmp eax, 1
-    je .phase_hold
-    jmp .phase_down
-
-.phase_up:
-    mov eax, dword [player_y + 0]
-    add eax, 1
-    mov dword [player_y + 0], eax
-
-    mov eax, dword [player_y + 4]
-    add eax, 1
-    mov dword [player_y + 4], eax
-
-    mov eax, dword [player_y + 8]
-    add eax, 1
-    mov dword [player_y + 8], eax
-
-    mov eax, dword [player_y + 12]
-    add eax, 1
-    mov dword [player_y + 12], eax
-
-    mov eax, dword [stepCounter]
-    inc eax
-    mov dword [stepCounter], eax
-
-    cmp eax, 4
-    jl .update_done
-
-    mov dword [jumpPhase], 1
-    mov dword [stepCounter], 0
-    jmp .update_done
-
-.phase_hold:
-    mov eax, dword [stepCounter]
-    inc eax
-    mov dword [stepCounter], eax
-
-    cmp eax, 2
-    jl .update_done
-
-    mov dword [jumpPhase], 2
-    mov dword [stepCounter], 0
-    jmp .update_done
-
-.phase_down:
-    mov eax, dword [player_y + 0]
-    cmp eax, dword [jumpStartY + 0]
-    je .landed
-
-    mov eax, dword [player_y + 0]
-    dec eax
-    mov dword [player_y + 0], eax
-
-    mov eax, dword [player_y + 4]
-    dec eax
-    mov dword [player_y + 4], eax
-
-    mov eax, dword [player_y + 8]
-    dec eax
-    mov dword [player_y + 8], eax
-
-    mov eax, dword [player_y + 12]
-    dec eax
-    mov dword [player_y + 12], eax
-
-    jmp .update_done
-
-.landed:
-    mov byte [isJumping], 0
-    mov dword [jumpPhase], 0
-    mov dword [stepCounter], 0
-
-.update_done:
-    pop rax
-    ret
-
-_save_terminal:
-    push rax
-    push rdi
-    push rsi
-    push rdx
-    mov rax, SYS_IOCTL
-    mov rdi, STDIN
-    mov rsi, TCGETS
-    mov rdx, old_termios
-    syscall
     pop rdx
-    pop rsi
-    pop rdi
-    pop rax
+    pop rcx
+    pop rbx
     ret
 
-_set_raw_mode:
-    push rax
-    push rdi
-    push rsi
-    push rdx
-    
-    mov rax, SYS_IOCTL
-    mov rdi, STDIN
-    mov rsi, TCGETS
-    mov rdx, termios
-    syscall
-    
-    mov eax, dword [termios + 12]
-    and eax, ~2
-    and eax, ~8
-    and eax, ~1
-    mov dword [termios + 12], eax
-    
-    mov byte [termios + 22], 0
-    mov byte [termios + 23], 0
-    
-    mov rax, SYS_IOCTL
-    mov rdi, STDIN
-    mov rsi, TCSETS
-    mov rdx, termios
-    syscall
-    
+.next:
+    inc r14
+    jmp .checkLoop
+
+.noCollision:
+    pop r14
+    pop r13
+    pop r12
+    pop rsi
     pop rdx
-    pop rsi
-    pop rdi
-    pop rax
+    pop rcx
+    pop rbx
     ret
 
-_restore_terminal:
+clearScreen:
     push rax
-    push rdi
-    push rsi
-    push rdx
-    mov rax, SYS_IOCTL
-    mov rdi, STDIN
-    mov rsi, TCSETS
-    mov rdx, old_termios
-    syscall
-    pop rdx
-    pop rsi
-    pop rdi
+    mov rax, clear
+    call print
     pop rax
     ret
 
-_clearScreen:
+drawCanvas:
+    push rcx
+    push rbx
     push rax
-    mov rax, clear_seq
-    call _print
+    
+    xor rcx, rcx            
+
+    call clearScreen
+    mov rax, instruction
+    call print
+
+    mov rax, newline
+    call print
+
+    mov rax, scoreMsg
+    call print
+    call printScore
+
+.heightLoop:
+    cmp ecx, dword [height]
+    jge .drawDone          
+    
+    xor rbx, rbx            
+
+.widthLoop:
+    cmp ebx, dword [width]
+    jge .widthDone           
+    
+    push rbx
+    push rcx
+
+    mov rbx, rbx
+    mov rcx, rcx
+    
+    call isPlayer
+    cmp rax, 1
+    je .drawPlayer
+
+    call isObstacle
+    cmp rax, 1
+    je .drawObstacle
+    
+    call isGround
+    cmp rax, 1
+    je .drawGround
+    
+    mov rax, space_str
+    call print
+    jmp .nextWidth
+
+.drawPlayer:
+    mov rax, player_char
+    call print
+    jmp .nextWidth
+
+.drawObstacle:
+    movzx eax, byte [currentObstacleId]
+    movzx ecx, byte [obstacleChars + eax]
+    mov byte [obstacleCharBuf], cl
+    mov byte [obstacleCharBuf + 1], 0
+    lea rax, [obstacleCharBuf]
+    call print
+    jmp .nextWidth
+
+.drawGround:
+    mov rax, star_str
+    call print
+
+.nextWidth:
+    pop rcx
+    pop rbx
+    
+    inc rbx                 
+    jmp .widthLoop
+
+.widthDone:
+    push rcx
+    mov rax, newline
+    call print
+    pop rcx
+    
+    inc rcx                 
+    jmp .heightLoop
+
+.drawDone:
     pop rax
+    pop rbx
+    pop rcx
     ret
 
-_screenToGame:
+; macht das die unter linie y = 0 ist
+
+screenToGame:
     push rbx
     push rcx
     
@@ -691,7 +767,7 @@ _screenToGame:
     pop rbx
     ret
 
-_isPlayerHere:
+isPlayer:
     push rbx
     push rcx
     push rdx
@@ -700,7 +776,7 @@ _isPlayerHere:
     push r13
     push r14
     
-    call _screenToGame      
+    call screenToGame      
     
     xor r14, r14            
     
@@ -741,7 +817,7 @@ _isPlayerHere:
     pop rbx
     ret
 
-_isObstacleHere:
+isObstacle:
     push rbx
     push rcx
     push rdx
@@ -751,12 +827,12 @@ _isObstacleHere:
     push r14
 
     ; rbx = screen-x, rcx = screen-y
-    call _screenToGame      
+    call screenToGame      
     ; r12 = game-x, r13 = game-y
 
     xor r14, r14
 
-.check_loop:
+.checkLoop:
     movzx rcx, byte [obstacleCount]
     cmp r14, rcx
     jge .notObstacle
@@ -783,7 +859,7 @@ _isObstacleHere:
 
 .next:
     inc r14
-    jmp .check_loop
+    jmp .checkLoop
 
 .notObstacle:
     xor rax, rax
@@ -796,7 +872,7 @@ _isObstacleHere:
     pop rbx
     ret
 
-_isGroundHere:
+isGround:
     push rbx
     push rcx
     push rdx
@@ -804,7 +880,7 @@ _isGroundHere:
     push r12
     push r13
     
-    call _screenToGame      
+    call screenToGame      
     
     cmp r13d, dword [ground_y]
     jle .isGround
@@ -828,99 +904,7 @@ _isGroundHere:
     pop rbx
     ret
 
-_drawCanvas:
-    push rcx
-    push rbx
-    push rax
-    
-    xor rcx, rcx            
-
-    call _clearScreen
-    mov rax, instruction
-    call _print
-
-    mov rax, newline
-    call _print
-
-    mov rax, scoreMsg
-    call _print
-    call _printScore
-
-
-
-.height_loop:
-    cmp ecx, dword [height]
-    jge .draw_done          
-    
-    xor rbx, rbx            
-
-.width_loop:
-    cmp ebx, dword [width]
-    jge .width_done           
-    
-    push rbx
-    push rcx
-
-    mov rbx, rbx
-    mov rcx, rcx
-    
-    call _isPlayerHere
-    cmp rax, 1
-    je .draw_player
-
-    call _isObstacleHere
-    cmp rax, 1
-    je .drawObstacle
-    
-    call _isGroundHere
-    cmp rax, 1
-    je .draw_ground
-    
-    mov rax, space_str
-    call _print
-    jmp .next_width
-
-.draw_player:
-    mov rax, player_char
-    call _print
-    jmp .next_width
-
-.drawObstacle:
-    movzx eax, byte [currentObstacleId]
-    movzx ecx, byte [obstacleChars + eax]
-    mov byte [obstacleCharBuf], cl
-    mov byte [obstacleCharBuf + 1], 0
-    lea rax, [obstacleCharBuf]
-    call _print
-    jmp .next_width
-
-.draw_ground:
-    mov rax, star_str
-    call _print
-
-.next_width:
-    pop rcx
-    pop rbx
-    
-    inc rbx                 
-    jmp .width_loop
-
-.width_done:
-    push rcx
-    mov rax, newline
-    call _print
-    pop rcx
-    
-    inc rcx                 
-    jmp .height_loop
-
-.draw_done:
-    pop rax
-    pop rbx
-    pop rcx
-    ret
-
-_print: 
+print: 
     push rax
     push rbx
     push rcx
@@ -931,14 +915,14 @@ _print:
     mov rbx, rax
     xor rcx, rcx
     
-.count_loop:
+.countLoop:
     mov al, [rbx + rcx]
     cmp al, 0
-    je .print_it
+    je .print
     inc rcx
-    jmp .count_loop
+    jmp .countLoop
     
-.print_it:
+.print:
     mov rax, SYS_WRITE
     mov rdi, STDOUT
     mov rsi, rbx
@@ -953,7 +937,7 @@ _print:
     pop rax
     ret
 
-_printScore:
+printScore:
     push rax
     push rbx
     push rcx
@@ -986,7 +970,7 @@ _printScore:
 .print:
     inc rdi
     mov rax, rdi
-    call _print
+    call print
 
     pop rsi
     pop rdi
@@ -996,7 +980,23 @@ _printScore:
     pop rax
     ret
 
-_exit: 
+restoreTerminal:
+    push rax
+    push rdi
+    push rsi
+    push rdx
+    mov rax, SYS_IOCTL
+    mov rdi, STDIN
+    mov rsi, TCSETS
+    mov rdx, old_termios
+    syscall
+    pop rdx
+    pop rsi
+    pop rdi
+    pop rax
+    ret
+
+exit: 
     mov rax, SYS_EXIT
     xor rdi, rdi
     syscall
