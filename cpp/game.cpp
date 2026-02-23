@@ -5,6 +5,14 @@
 #include <unistd.h>
 #include <vector>
 
+const int WIDTH = 60;
+const int HEIGHT = 15;
+const int GROUND_Y = 12;
+bool isRunning = true;
+int score = 0;
+int frameCounter = 0;
+int lastObstacleX = WIDTH + 10;
+
 class Player {
 public:
   int x[4];
@@ -140,16 +148,7 @@ public:
   }
 };
 
-bool isRunning = true;
-int score = 0;
-const int WIDTH = 60;
-const int HEIGHT = 15;
-const int GROUND_Y = 12;
-
 std::vector<Obstacle *> obstacles;
-int frameCounter = 0;
-int lastObstacleX = WIDTH + 10;
-
 Player *pPlayer = nullptr;
 
 void inputOn() {
@@ -244,14 +243,14 @@ void updateObstacles() {
     }
   }
 
-  int rightMostX = 0;
+  int rightLast = 0;
   for (auto *obs : obstacles) {
     int right = obs->getRightEdge();
-    if (right > rightMostX)
-      rightMostX = right;
+    if (right > rightLast)
+      rightLast = right;
   }
 
-  if (rightMostX < WIDTH - 15 || obstacles.empty()) {
+  if (rightLast < WIDTH - 15 || obstacles.empty()) {
     if (rand() % 18 == 0) {
       spawnObstacle();
     }
@@ -288,10 +287,10 @@ void drawCanvas() {
 
 int main() {
   srand(time(NULL));
-  int xCoords[4] = {5, 5, 6, 6};
-  int yCoords[4] = {GROUND_Y - 1, GROUND_Y - 2, GROUND_Y - 1, GROUND_Y - 2};
+  int xPlayer[4] = {5, 5, 6, 6};
+  int yPlayer[4] = {GROUND_Y - 1, GROUND_Y - 2, GROUND_Y - 1, GROUND_Y - 2};
 
-  Player player(xCoords, yCoords, '0');
+  Player player(xPlayer, yPlayer, '0');
 
   pPlayer = &player;
 
