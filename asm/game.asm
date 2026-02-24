@@ -334,19 +334,19 @@ updateJump:
 
 .phaseUp:
     mov eax, dword [player_y + 0]
-    add eax, 1
+    inc eax
     mov dword [player_y + 0], eax
 
     mov eax, dword [player_y + 4]
-    add eax, 1
+    inc eax
     mov dword [player_y + 4], eax
 
     mov eax, dword [player_y + 8]
-    add eax, 1
+    inc eax
     mov dword [player_y + 8], eax
 
     mov eax, dword [player_y + 12]
-    add eax, 1
+    inc eax
     mov dword [player_y + 12], eax
 
     mov eax, dword [stepCounter]
