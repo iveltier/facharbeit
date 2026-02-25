@@ -10,8 +10,10 @@ Eine Analyse am Beispiel von RollerCoaster Tycoon und einem Vergleich von Assemb
 ## 📁 Repository-Struktur
 
 in asm/ ist die ausführbare Assembly-Datei, der Source-Code und das Object-File
+
 in cpp/ ist die ausführbare CPP-Datei und der Source-Code
-in js/ ist der Javascript soruce code
+
+in js/ ist der Javascript source code
 
 in logs/ sind messungen zur Ressourceneffizienz
 in videos/ sind demo-videos
