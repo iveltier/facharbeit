@@ -9,29 +9,12 @@ Eine Analyse am Beispiel von RollerCoaster Tycoon und einem Vergleich von Assemb
 
 ## 📁 Repository-Struktur
 
-facharbeit/
-
-├── asm/ # Assembly (x86-64) Implementierung
-│ ├── dino.asm # Quellcode
-│ ├── dino # Kompilierte Binärdatei
-│ └── ...
-├── cpp/ # C++ Implementierung
-│ ├── dino.cpp # Quellcode
-│ └── dino
-├── js/ # JavaScript (Node.js) Implementierung
-│ └── dino.js
-├── videos/ # Dokumentationsvideos
-│ ├── asm_demo.mp4 # Assembly Version
-│ ├── cpp_demo.mp4 # C++ Version
-│ └── js_demo.mp4 # JavaScript Version
-├── logs/ # Messergebnisse & Rohdaten
-│ ├── asm.csv # Assembly Version
-│ ├── cpp.csv # C++ Version
-│ └── js.csv # JS Version
-└── README.md # Diese Datei
+in asm/ ist die ausführbare Assembly-Datei, der Source-Code und das Object-File
+in cpp/ ist die ausführbare CPP-Datei und der Source-Code
+in js/ ist der Javascript soruce code
 
 in logs/ sind messungen zur Ressourceneffizienz
-in videos sind demo-videos
+in videos/ sind demo-videos
 
 # Installation
 
