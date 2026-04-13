@@ -18,6 +18,8 @@ in js/ ist der Javascript source code
 in logs/ sind messungen zur Ressourceneffizienz
 in videos/ sind demo-videos
 
+unter facharbeit.pdf ist die komplette anonyme facharbeit
+
 # Installation
 
 ## Schnellstart
